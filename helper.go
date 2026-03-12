@@ -58,11 +58,6 @@ func Clear[T any](c *Chain) *Chain {
 	return c
 }
 
-// GetAs retrieves a value and converts it to the target type
-func GetAs[T any](c *Chain) (T, error) {
-	return Get[T](c)
-}
-
 // Map transforms a value of type T1 to T2 using the provided function
 func Map[T1, T2 any](c *Chain, fn func(T1) T2) *Chain {
 	return c.Then(func(t1 T1) T2 {
@@ -75,4 +70,21 @@ func FlatMap[T1, T2 any](c *Chain, fn func(T1) (T2, error)) *Chain {
 	return c.Then(func(t1 T1) (T2, error) {
 		return fn(t1)
 	})
+}
+
+// GetFromError retrieves a value of type T from the error context
+func GetFromError[T any](ctx *ErrorContext) (T, error) {
+	var zero T
+	t := reflect.TypeOf(zero)
+	if val, ok := ctx.Values[t]; ok {
+		return val.(T), nil
+	}
+	return zero, fmt.Errorf("no value found for type: %v in error context", t)
+}
+
+// HasInError checks if a value of type T exists in the error context
+func HasInError[T any](ctx *ErrorContext) bool {
+	var zero T
+	_, ok := ctx.Values[reflect.TypeOf(zero)]
+	return ok
 }

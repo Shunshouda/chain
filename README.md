@@ -45,20 +45,35 @@ c.Then(func() (string, error) {
 
 ```go
 c := chain.NewChain()
-c.OnError(func(err error) {
-    fmt.Printf("Custom error handler: %v\n", err)
+
+c.OnError(func(ctx *ErrorContext) {
+    fmt.Printf("Error: %v\n", ctx.Error)
+    
+    // Access any values that were available when the error occurred
+    if user, err := GetFromError[User](ctx); err == nil {
+        fmt.Printf("User at error time: %+v\n", user)
+    }
+    
+    if config, err := GetFromError[Config](ctx); err == nil {
+        fmt.Printf("Config at error time: %+v\n", config)
+    }
+    
+    // Check if specific types exist
+    if HasInError[Transaction](ctx) {
+        fmt.Println("Transaction data available for recovery")
+    }
+    
+    // Access the chain itself for potential recovery
+    fmt.Printf("Chain state: %v\n", ctx.Chain.IsSuccess())
 })
 
-c.Then(func() (int, error) {
-    return 0, fmt.Errorf("simulated error")
-}).Then(func(i int) string {
-    // This won't execute if the above function returns an error
-    return "won't execute"
+c.Then(func() (User, error) {
+    return User{ID: 1, Name: "Alice"}, nil
+}).Then(func(u User) (Config, error) {
+    return Config{MaxRetries: 3}, nil
+}).Then(func(u User, cfg Config) (string, error) {
+    return "", fmt.Errorf("processing failed")
 })
-
-if c.IsError() {
-    fmt.Printf("Chain has error: %v\n", c.GetError())
-}
 ```
 
 ### Type-Safe Value Retrieval

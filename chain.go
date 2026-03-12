@@ -10,7 +10,15 @@ import (
 type Chain struct {
 	values  map[reflect.Type]interface{}
 	err     error
-	onError func(error)
+	errCtx  *ErrorContext
+	onError func(*ErrorContext)
+}
+
+// ErrorContext contains the error and the values available at the time of error
+type ErrorContext struct {
+	Error  error
+	Values map[reflect.Type]interface{}
+	Chain  *Chain
 }
 
 // NewChain creates a new Chain instance
@@ -18,14 +26,14 @@ func NewChain() *Chain {
 	return &Chain{
 		values: make(map[reflect.Type]interface{}),
 		err:    nil,
-		onError: func(err error) {
-			fmt.Printf("Error: %v\n", err)
+		onError: func(ctx *ErrorContext) {
+			fmt.Printf("Error: %v\n", ctx.Error)
 		},
 	}
 }
 
-// OnError sets a custom error handling callback
-func (c *Chain) OnError(callback func(error)) *Chain {
+// OnError sets a custom error handling callback that receives an ErrorContext
+func (c *Chain) OnError(callback func(*ErrorContext)) *Chain {
 	if c.err == nil {
 		c.onError = callback
 	}
@@ -45,7 +53,7 @@ func (c *Chain) Then(fn interface{}) *Chain {
 	fnValue := reflect.ValueOf(fn)
 	if fnValue.Kind() != reflect.Func {
 		c.err = fmt.Errorf("provided value is not a function")
-		c.onError(c.err)
+		c.triggerError(c.err)
 		return c
 	}
 
@@ -53,7 +61,7 @@ func (c *Chain) Then(fn interface{}) *Chain {
 	args, err := c.prepareArguments(fnValue.Type())
 	if err != nil {
 		c.err = err
-		c.onError(c.err)
+		c.triggerError(c.err)
 		return c
 	}
 
@@ -111,7 +119,7 @@ func (c *Chain) processResults(results []reflect.Value) {
 	if lastResult.Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 		if !lastResult.IsNil() {
 			c.err = lastResult.Interface().(error)
-			c.onError(c.err)
+			c.triggerError(c.err)
 			return
 		}
 		// Store all non-error return values
@@ -124,6 +132,25 @@ func (c *Chain) processResults(results []reflect.Value) {
 			c.storeValue(results[i].Interface())
 		}
 	}
+}
+
+// triggerError triggers the error callback with context
+func (c *Chain) triggerError(err error) {
+	c.errCtx = &ErrorContext{
+		Error:  err,
+		Values: c.copyValues(),
+		Chain:  c,
+	}
+	c.onError(c.errCtx)
+}
+
+// copyValues creates a copy of the values map
+func (c *Chain) copyValues() map[reflect.Type]interface{} {
+	copy := make(map[reflect.Type]interface{})
+	for k, v := range c.values {
+		copy[k] = v
+	}
+	return copy
 }
 
 // storeValue stores a value by its type
@@ -146,10 +173,16 @@ func (c *Chain) GetError() error {
 	return c.err
 }
 
+// GetErrorContext returns the error context if any
+func (c *Chain) GetErrorContext() *ErrorContext {
+	return c.errCtx
+}
+
 // Reset clears all values and error from the chain
 func (c *Chain) Reset() *Chain {
 	c.values = make(map[reflect.Type]interface{})
 	c.err = nil
+	c.errCtx = nil
 	return c
 }
 
