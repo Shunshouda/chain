@@ -35,6 +35,12 @@ func GetOrDefault[T any](c *Chain, defaultValue T) T {
 	return defaultValue
 }
 
+// TryGet retrieves a value of type T or panics if not found
+func TryGet[T any](c *Chain) T {
+	val, _ := Get[T](c)
+	return val
+}
+
 // MustGet retrieves a value of type T or panics if not found
 func MustGet[T any](c *Chain) T {
 	val, err := Get[T](c)
